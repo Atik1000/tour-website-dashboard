@@ -28,6 +28,7 @@ import {
     TourDate,
     TourTime
 } from '@/app/lib/api'
+import { getTravelerLimits } from '@/app/lib/travelers'
 import Link from 'next/link'
 
 import { Calendar } from '@/components/ui/calendar'
@@ -434,6 +435,8 @@ export default function NewBookingPage() {
         setError(null)
     }
 
+    const travelerLimits = selectedTour ? getTravelerLimits(selectedTour, selectedTimeSlot) : null
+
     const handleUpdateCount = (type: string, delta: number, max: number) => {
         setCounts(prev => {
             const current = (prev as any)[type]
@@ -640,13 +643,13 @@ export default function NewBookingPage() {
 
                                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                                 {[
-                                                    { label: 'Adult', key: 'adults', max: selectedTour.max_adults, age: `${selectedTour.adult_age_min}-${selectedTour.adult_age_max}` },
-                                                    { label: 'Child', key: 'children', max: selectedTour.max_children, age: `${selectedTour.child_age_min}-${selectedTour.child_age_max}` },
-                                                    { label: 'Infant', key: 'infants', max: selectedTour.max_infants, age: `${selectedTour.infant_age_min}-${selectedTour.infant_age_max}` },
-                                                    { label: 'Youth', key: 'youths', max: selectedTour.max_youth, age: `${selectedTour.youth_age_min}-${selectedTour.youth_age_max}` },
-                                                    { label: 'Student EU', key: 'students', max: selectedTour.max_student_eu, age: `${selectedTour.student_eu_age_min}-${selectedTour.student_eu_age_max}` }
+                                                    { label: 'Adult', key: 'adults', ...travelerLimits!.adults, age: `${selectedTour.adult_age_min}-${selectedTour.adult_age_max}` },
+                                                    { label: 'Child', key: 'children', ...travelerLimits!.children, age: `${selectedTour.child_age_min}-${selectedTour.child_age_max}` },
+                                                    { label: 'Infant', key: 'infants', ...travelerLimits!.infants, age: `${selectedTour.infant_age_min}-${selectedTour.infant_age_max}` },
+                                                    { label: 'Youth', key: 'youths', ...travelerLimits!.youths, age: `${selectedTour.youth_age_min}-${selectedTour.youth_age_max}` },
+                                                    { label: 'Student EU', key: 'students', ...travelerLimits!.students, age: `${selectedTour.student_eu_age_min}-${selectedTour.student_eu_age_max}` }
                                                 ].map((item) => (
-                                                    item.max > 0 && (
+                                                    item.show && (
                                                         <div key={item.key} className="p-5 rounded-2xl bg-secondary/20 border border-border/30 flex flex-col gap-4">
                                                             <div className="flex flex-col">
                                                                 <span className="font-bold text-foreground">{item.label}</span>

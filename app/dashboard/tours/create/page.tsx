@@ -279,6 +279,8 @@ export default function CreateTourPage() {
         )
     }
 
+    const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024
+
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files
         if (!files || files.length === 0) return
@@ -295,20 +297,31 @@ export default function CreateTourPage() {
 
         setIsUploading(true)
         const newUploadedImages = [...uploadedImages]
+        const failures: string[] = []
+
+        // Upload each file on its own so one bad file does not discard the rest.
+        for (const file of Array.from(files)) {
+            if (file.size > MAX_IMAGE_SIZE_BYTES) {
+                failures.push(`"${file.name}" is larger than 5MB.`)
+                continue
+            }
+            try {
+                newUploadedImages.push(await uploadTourImage(token, file))
+            } catch (err: any) {
+                failures.push(err?.detail || `Could not upload "${file.name}". Check your connection and try again.`)
+            }
+        }
 
         try {
-            for (let i = 0; i < files.length; i++) {
-                const img = await uploadTourImage(token, files[i])
-                newUploadedImages.push(img)
-            }
             setUploadedImages(newUploadedImages)
             updateLocalStorage(newUploadedImages)
-        } catch (err: any) {
-            setErrorDialog({
-                isOpen: true,
-                title: 'Upload Error',
-                message: err.detail || 'Failed to upload one or more images.'
-            })
+            if (failures.length > 0) {
+                setErrorDialog({
+                    isOpen: true,
+                    title: 'Upload Error',
+                    message: failures.join('\n')
+                })
+            }
         } finally {
             setIsUploading(false)
             // Clear input

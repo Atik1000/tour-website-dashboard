@@ -369,10 +369,23 @@ export const uploadTourImage = async (token: string, file: File): Promise<TourIm
         body: formData,
     });
 
-    const responseData = await response.json();
+    // The proxy in front of the API answers oversized or failed uploads with an
+    // HTML page, so the body is not always JSON.
+    const responseData = await response.json().catch(() => null);
 
     if (!response.ok) {
-        throw responseData;
+        if (response.status === 413) {
+            throw { detail: `"${file.name}" is too large for the server to accept. Please use a smaller image.` };
+        }
+        if (response.status === 401) {
+            throw { detail: 'Your session has expired. Please log in again.' };
+        }
+        const fieldError = Array.isArray(responseData?.file) ? responseData.file.join(' ') : responseData?.file;
+        throw { detail: responseData?.detail || fieldError || `Could not upload "${file.name}" (server responded ${response.status}).` };
+    }
+
+    if (!responseData) {
+        throw { detail: `Could not upload "${file.name}": the server sent an unreadable response.` };
     }
 
     return responseData as TourImage;
