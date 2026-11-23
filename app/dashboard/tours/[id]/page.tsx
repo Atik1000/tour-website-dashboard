@@ -6,8 +6,8 @@ import { useRouter, useParams } from 'next/navigation'
 import { useDispatch, useSelector } from 'react-redux'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { ChevronLeft, ChevronRight, Edit, Trash2, Plus, Clock, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ChevronLeft, ChevronRight, Edit, Trash2, Plus, Clock, Loader2, AlertCircle, CheckCircle2, CalendarDays, Check, X, MapPin } from 'lucide-react'
 import { getTourPlanDetail, deleteTourPlan, TourPlan } from '@/app/lib/api'
 import { getCookie } from '@/app/lib/cookies'
 import { LocationModal } from '@/components/dashboard/location-modal'
@@ -49,13 +49,20 @@ const TimeSlotCount = ({ dateId }: { dateId: string }) => {
     fetchCount()
   }, [dateId])
 
-  if (isLoading) return <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+  if (isLoading) return <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
 
   return (
-    <span className="text-xs text-muted-foreground mt-1">
+    <span className="text-muted-foreground">
       {count} time slot{count !== 1 ? 's' : ''}
     </span>
   )
+}
+
+// "2026-11-22" -> "22 Nov 2026". Format in UTC so date-only strings don't shift a day in negative-offset timezones.
+const formatTourDate = (value: string) => {
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return value
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' })
 }
 
 export default function TourDetailsPage() {
@@ -73,6 +80,12 @@ export default function TourDetailsPage() {
   const [locationModalOpen, setLocationModalOpen] = useState(false)
   const [dateModalOpen, setDateModalOpen] = useState(false)
   const [locationMode, setLocationMode] = useState<'create' | 'edit'>('create')
+
+  // Newest date first
+  const sortedDates = useMemo(
+    () => [...reduxDates].sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    [reduxDates]
+  )
 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [alertConfig, setAlertConfig] = useState<{
@@ -186,203 +199,256 @@ export default function TourDetailsPage() {
   }
 
   return (
-    <div className="space-y-8 pb-10">
-      {/* Back Button & Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex items-start sm:items-center gap-4">
-          <Link href="/dashboard/tours">
-            <Button variant="outline" size="icon" className="border-border bg-transparent flex-shrink-0">
-              <ChevronLeft size={20} />
+    <div className="space-y-6 pb-10">
+      {/* Breadcrumb */}
+      <nav className="flex items-center gap-2 text-sm" aria-label="Breadcrumb">
+        <Link href="/dashboard/tours" className="text-muted-foreground hover:text-foreground transition-colors">
+          Tours
+        </Link>
+        <span className="text-muted-foreground">/</span>
+        <span className="font-medium text-foreground">Tour details</span>
+      </nav>
+
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-3 mb-2">
+            <h1 className="text-2xl sm:text-3xl font-bold text-foreground">{tour.title}</h1>
+            <span
+              className={`inline-flex items-center rounded-md px-2.5 py-1 text-sm font-medium capitalize ${tour.is_active
+                ? 'bg-green-100 text-green-700'
+                : 'bg-secondary text-muted-foreground'
+                }`}
+            >
+              {tour.is_active ? 'Active' : (tour.status || 'Inactive')}
+            </span>
+          </div>
+          <p className="text-muted-foreground text-sm sm:text-base line-clamp-2 md:line-clamp-none">{tour.description}</p>
+        </div>
+        <div className="flex gap-2 flex-shrink-0">
+          <Link href={`/dashboard/tours/${tour.id}/edit`}>
+            <Button variant="outline" className="h-10 px-4 border-border bg-background cursor-pointer">
+              <Edit size={16} />
+              Edit tour
             </Button>
           </Link>
-          <div>
-            <h1 className="text-xl font-semibold text-foreground mb-2">{tour.title}</h1>
-            <p className="text-muted-foreground text-sm sm:text-base line-clamp-2 md:line-clamp-none">{tour.description}</p>
-          </div>
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Delete tour"
+            onClick={() => setIsDeleteDialogOpen(true)}
+            className="h-10 w-10 border-border bg-background text-destructive hover:text-destructive hover:bg-destructive/10 cursor-pointer"
+          >
+            <Trash2 size={16} />
+          </Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left Column - Image & Quick Info */}
-        <div className="lg:col-span-1 space-y-6">
-          {/* Image Carousel */}
-          <Card className="border-border overflow-hidden shadow-md">
-            <div className="relative bg-secondary h-76 sm:h-100">
-              <img
-                src={tour.images[currentImageIndex]?.file || "/placeholder.svg"}
-                alt={tour.title}
-                className="w-full h-full object-fixed"
-              />
-              {tour.images.length > 1 && (
-                <>
-                  <button
-                    onClick={handlePrevImage}
-                    className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white p-2 rounded-full transition-all"
-                  >
-                    <ChevronLeft size={20} />
-                  </button>
-                  <button
-                    onClick={handleNextImage}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white p-2 rounded-full transition-all"
-                  >
-                    <ChevronRight size={20} />
-                  </button>
-                </>
-              )}
-              <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1">
-                {tour.images.map((_, i) => (
-                  <div
-                    key={i}
-                    className={`h-2 rounded-full transition-all ${i === currentImageIndex ? 'bg-white w-6' : 'bg-white/50 w-2'
-                      }`}
-                  />
-                ))}
-              </div>
-            </div>
-          </Card>
+      {/* Top section: summary card + dates */}
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-6">
+        {/* Image & Quick Info */}
+        <Card className="border-border overflow-hidden shadow-sm py-0 gap-0">
+          <div className="relative bg-secondary aspect-[16/9]">
+            <img
+              src={tour.images[currentImageIndex]?.file || "/placeholder.svg"}
+              alt={tour.title}
+              className="w-full h-full object-cover"
+            />
+            {tour.images.length > 1 && (
+              <>
+                <button
+                  onClick={handlePrevImage}
+                  aria-label="Previous image"
+                  className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white p-1.5 rounded-full transition-all cursor-pointer"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <button
+                  onClick={handleNextImage}
+                  aria-label="Next image"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white p-1.5 rounded-full transition-all cursor-pointer"
+                >
+                  <ChevronRight size={18} />
+                </button>
+                <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1">
+                  {tour.images.map((_, i) => (
+                    <div
+                      key={i}
+                      className={`h-1.5 rounded-full transition-all ${i === currentImageIndex ? 'bg-white w-5' : 'bg-white/50 w-1.5'}`}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
 
-          {/* Price & Duration Card */}
-          <Card className="p-6 border-border shadow-md space-y-4">
-            <div>
-              <p className="text-muted-foreground text-xs uppercase font-semibold tracking-wider mb-1">Starting From</p>
-              <p className="text-2x font-semibold text-primary">${tour.price_adult}</p>
+          <div className="px-6 pb-5 pt-4">
+            <div className="pb-3">
+              <p className="text-sm text-muted-foreground">Starting from</p>
+              <p className="text-3xl font-bold text-primary">${tour.price_adult}</p>
             </div>
             {tour.duration_days && (
-              <div className="flex items-center gap-2 pt-2 border-t border-border">
-                <Clock className="text-muted-foreground" size={20} />
-                <span className="text-foreground font-medium">{tour.duration_days} Days</span>
+              <div className="flex items-center gap-3 py-3 border-t border-border">
+                <Clock className="text-foreground" size={20} />
+                <span className="text-foreground font-medium">
+                  {tour.duration_days} day{Number(tour.duration_days) !== 1 ? 's' : ''}
+                </span>
               </div>
             )}
-            <div className={`flex items-center gap-2 ${!tour.duration_days ? 'pt-2 border-t border-border' : ''}`}>
-              <Badge variant={tour.is_active ? "default" : "secondary"}>
-                {tour.status}
-              </Badge>
-              {tour.free_cancellation && (
-                <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50">
-                  Free Cancellation
-                </Badge>
-              )}
-              {tour.pickup_included && (
-                <Badge variant="outline" className="text-blue-600 border-blue-200 bg-blue-50">
-                  Pickup Included
-                </Badge>
-              )}
-            </div>
-          </Card>
-          {/* Actions */}
-          <div className="p-4 border-t border-border flex gap-2">
-            <Link href={`/dashboard/tours/${tour.id}/edit`} className="flex-1">
-              <Button
-                variant="outline"
-                className="w-full border-border text-black/80 hover:text-black/80 hover:bg-primary/10 bg-transparent h-10 cursor-pointer"
-              >
-                <Edit size={18} />
-                Edit
-              </Button>
-            </Link>
+            {tour.free_cancellation && (
+              <div className="flex items-center gap-3 py-3 border-t border-border">
+                <CheckCircle2 className="text-green-600" size={20} />
+                <span className="text-green-700 font-medium">Free cancellation</span>
+              </div>
+            )}
+            {tour.pickup_included && (
+              <div className="flex items-center gap-3 py-3 border-t border-border">
+                <CheckCircle2 className="text-blue-600" size={20} />
+                <span className="text-blue-700 font-medium">Pickup included</span>
+              </div>
+            )}
+          </div>
+        </Card>
+
+        {/* Dates & Tickets */}
+        <Card className="p-6 border-border shadow-sm gap-0">
+          <div className="flex items-center justify-between gap-4 mb-5">
+            <h2 className="text-xl sm:text-2xl font-bold text-foreground">Dates &amp; Tickets</h2>
             <Button
-              variant="outline"
-              onClick={() => setIsDeleteDialogOpen(true)}
-              className="flex-1 border-border text-destructive hover:text-destructive hover:bg-destructive/10 bg-transparent h-10 cursor-pointer"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 cursor-pointer"
+              onClick={() => setDateModalOpen(true)}
             >
-              <Trash2 size={18} />
-              Delete
+              <Plus size={18} />
+              Add new date
             </Button>
           </div>
-        </div>
 
-        {/* Right Column - Comprehensive Content */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Overview Section */}
-          <Card className="p-6 border-border shadow-md space-y-6">
-            <h2 className="text-lg font-medium text-foreground">Overview</h2>
-
-            {tour.full_description && (
-              <div className="prose prose-sm max-w-none text-muted-foreground wrap-break-word">
-                <p className="whitespace-pre-line">{tour.full_description}</p>
-              </div>
-            )}
-
-            {tour.highlights && tour.highlights.length > 0 && (
-              <div className="space-y-3 pt-4 border-t border-border">
-                <h3 className="text-lg font-medium text-foreground">Highlights</h3>
-                <ul className="grid grid-cols-1 md:grid-cols-1 gap-2">
-                  {tour.highlights.map((item, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
-                      <span className="text-primary flex-shrink-0">•</span>
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </Card>
-
-          {/* Locations Section - RESTORED */}
-          <Card className="p-6 border-border shadow-md">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-medium text-foreground">Locations</h2>
-              {/* <Button
-                size="sm"
-                className="bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-2"
-                onClick={() => {
-                  setLocationMode('create')
-                  setLocationModalOpen(true)
-                }}
-              >
-                <Plus size={16} />
-                Add New Location
-              </Button> */}
+          {isDatesLoading && sortedDates.length === 0 ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
             </div>
-
-            {tour.locations.length > 0 ? (
-              <div className="space-y-2 mb-4">
-                {tour.locations.map((location) => (
-                  <div
-                    key={location.id}
-                    className="flex items-center justify-between bg-secondary p-3 rounded-lg border border-border"
+          ) : sortedDates.length > 0 ? (
+            <div className="rounded-lg border border-border overflow-hidden">
+              <div className="grid grid-cols-[1fr_1fr_auto] gap-4 bg-secondary px-4 py-3 text-sm font-medium text-muted-foreground">
+                <span>Date</span>
+                <span>Time slots</span>
+                <span className="w-5" />
+              </div>
+              <div className="max-h-[22rem] overflow-y-auto divide-y divide-border">
+                {sortedDates.map((date: any) => (
+                  <Link
+                    key={date.id}
+                    href={`/dashboard/tours/${tour.id}/dates/${date.id}`}
+                    className="grid grid-cols-[1fr_1fr_auto] items-center gap-4 px-4 py-3 hover:bg-primary/5 transition-colors"
                   >
-                    <div>
-                      <Badge className="bg-primary text-primary-foreground mb-1">
-                        {location.name}
-                      </Badge>
-                      {location.description && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {location.description}
-                        </p>
-                      )}
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <CalendarDays size={20} />
+                      </span>
+                      <span className="font-semibold text-foreground truncate">{formatTourDate(date.date)}</span>
                     </div>
-                  </div>
+                    <TimeSlotCount dateId={date.id.toString()} />
+                    <ChevronRight size={18} className="text-muted-foreground" />
+                  </Link>
                 ))}
               </div>
-            ) : (
-              <p className="text-muted-foreground text-sm py-4 text-center">
-                No locations added yet
-              </p>
-            )}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-border py-10 text-center">
+              <CalendarDays className="mx-auto mb-2 text-muted-foreground" size={28} />
+              <p className="text-muted-foreground text-sm">No dates scheduled yet</p>
+            </div>
+          )}
+        </Card>
+      </div>
 
-            {/* <Button
-              variant="outline"
-              className="w-full border-border text-primary hover:bg-primary/10 bg-transparent"
-              onClick={() => {
-                setLocationMode('edit')
-                setLocationModalOpen(true)
-              }}
+      {/* Detail tabs */}
+      <Tabs defaultValue="overview" className="gap-6">
+        <TabsList className="h-auto w-full justify-start gap-2 sm:gap-6 rounded-none border-b border-border bg-transparent p-0 overflow-x-auto overflow-y-hidden">
+          {[
+            { value: 'overview', label: 'Overview' },
+            { value: 'locations', label: 'Locations' },
+            { value: 'includes', label: 'Includes & Excludes' },
+            { value: 'info', label: 'Important Information' },
+          ].map((t) => (
+            <TabsTrigger
+              key={t.value}
+              value={t.value}
+              className="flex-none -mb-px h-auto rounded-none border-0 border-b-[3px] border-transparent bg-transparent px-2 pb-3 pt-1 text-base font-medium text-foreground shadow-none cursor-pointer data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:shadow-none"
             >
-              Edit Locations
-            </Button> */}
-          </Card>
+              {t.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
 
-          {/* Inclusions & Exclusions */}
-          <Card className="p-6 border-border shadow-md">
+        {/* Overview */}
+        <TabsContent value="overview">
+          <Card className="p-6 border-border shadow-sm">
+            <div className="grid grid-cols-1 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-8">
+              <div>
+                <h2 className="text-xl font-bold text-foreground mb-4">Overview</h2>
+                {tour.full_description ? (
+                  <p className="text-muted-foreground leading-relaxed whitespace-pre-line wrap-break-word">{tour.full_description}</p>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">No description</p>
+                )}
+              </div>
+              <div className="pt-6 md:pt-0 border-t md:border-t-0 md:border-l border-border md:pl-8">
+                <h2 className="text-xl font-bold text-foreground mb-4">Highlights</h2>
+                {tour.highlights && tour.highlights.length > 0 ? (
+                  <ul className="space-y-3">
+                    {tour.highlights.map((item, i) => (
+                      <li key={i} className="flex items-start gap-3 text-muted-foreground">
+                        <Check size={18} className="text-primary flex-shrink-0 mt-0.5" />
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">No highlights</p>
+                )}
+              </div>
+            </div>
+          </Card>
+        </TabsContent>
+
+        {/* Locations */}
+        <TabsContent value="locations">
+          <Card className="p-6 border-border shadow-sm">
+            <h2 className="text-xl font-bold text-foreground mb-4">Locations</h2>
+            {tour.locations.length > 0 ? (
+              <ul className="divide-y divide-border">
+                {tour.locations.map((location) => (
+                  <li key={location.id} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
+                    <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      <MapPin size={18} />
+                    </span>
+                    <div>
+                      <p className="font-medium text-foreground">{location.name}</p>
+                      {location.description && (
+                        <p className="text-sm text-muted-foreground mt-0.5">{location.description}</p>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-muted-foreground text-sm italic">No locations added yet</p>
+            )}
+          </Card>
+        </TabsContent>
+
+        {/* Includes & Excludes */}
+        <TabsContent value="includes">
+          <Card className="p-6 border-border shadow-sm">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div>
-                <h3 className="text-lg font-medium text-foreground mb-4">Includes</h3>
+                <h2 className="text-xl font-bold text-foreground mb-4">Includes</h2>
                 {tour.includes.length > 0 ? (
-                  <ul className="space-y-2">
+                  <ul className="space-y-3">
                     {tour.includes.map((item, i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
-                        <span className="text-green-500 flex-shrink-0">✓</span>
+                      <li key={i} className="flex items-start gap-3 text-muted-foreground">
+                        <Check size={18} className="text-green-600 flex-shrink-0 mt-0.5" />
                         {item}
                       </li>
                     ))}
@@ -392,12 +458,12 @@ export default function TourDetailsPage() {
                 )}
               </div>
               <div className="pt-6 md:pt-0 border-t md:border-t-0 md:border-l border-border md:pl-8">
-                <h3 className="text-lg font-medium text-foreground mb-4">Excludes</h3>
+                <h2 className="text-xl font-bold text-foreground mb-4">Excludes</h2>
                 {tour.excludes.length > 0 ? (
-                  <ul className="space-y-2">
+                  <ul className="space-y-3">
                     {tour.excludes.map((item, i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
-                        <span className="text-destructive flex-shrink-0">✕</span>
+                      <li key={i} className="flex items-start gap-3 text-muted-foreground">
+                        <X size={18} className="text-destructive flex-shrink-0 mt-0.5" />
                         {item}
                       </li>
                     ))}
@@ -408,36 +474,35 @@ export default function TourDetailsPage() {
               </div>
             </div>
           </Card>
+        </TabsContent>
 
-          {/* Important Information */}
-          <Card className="p-6 border-border shadow-md space-y-6">
-            <h2 className="text-lg font-medium text-foreground">Important Information</h2>
+        {/* Important Information */}
+        <TabsContent value="info">
+          <Card className="p-6 border-border shadow-sm">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-medium text-foreground mb-3">Know Before You Go</h3>
-                  {tour.know_before_you_go.length > 0 ? (
-                    <ul className="space-y-3">
-                      {tour.know_before_you_go.map((item, i) => (
-                        <li key={i} className="text-sm text-muted-foreground pb-2 border-b border-border/50 last:border-0 flex items-start gap-2">
-                          <span className="text-destructive flex-shrink-0">{i + 1}.</span>
-                          {item}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-sm text-muted-foreground italic">No specific info</p>
-                  )}
-                </div>
+              <div>
+                <h2 className="text-xl font-bold text-foreground mb-4">Know before you go</h2>
+                {tour.know_before_you_go.length > 0 ? (
+                  <ol className="space-y-3">
+                    {tour.know_before_you_go.map((item, i) => (
+                      <li key={i} className="flex items-start gap-3 text-muted-foreground">
+                        <span className="text-primary font-semibold flex-shrink-0">{i + 1}.</span>
+                        {item}
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">No specific info</p>
+                )}
               </div>
-              <div className="space-y-6">
+              <div className="space-y-6 pt-6 md:pt-0 border-t md:border-t-0 md:border-l border-border md:pl-8">
                 <div>
-                  <h3 className="text-lg font-medium text-foreground mb-3">Not Allowed</h3>
+                  <h2 className="text-xl font-bold text-foreground mb-4">Not allowed</h2>
                   {tour.not_allowed.length > 0 ? (
-                    <ul className="space-y-2">
+                    <ul className="space-y-3">
                       {tour.not_allowed.map((item, i) => (
-                        <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
-                          <span className="text-destructive flex-shrink-0">•</span>
+                        <li key={i} className="flex items-start gap-3 text-muted-foreground">
+                          <X size={18} className="text-destructive flex-shrink-0 mt-0.5" />
                           {item}
                         </li>
                       ))}
@@ -447,12 +512,12 @@ export default function TourDetailsPage() {
                   )}
                 </div>
                 <div className="pt-6 border-t border-border">
-                  <h3 className="text-lg font-medium text-foreground mb-3">Not Suitable For</h3>
+                  <h2 className="text-xl font-bold text-foreground mb-4">Not suitable for</h2>
                   {tour.not_suitable_for.length > 0 ? (
-                    <ul className="space-y-2">
+                    <ul className="space-y-3">
                       {tour.not_suitable_for.map((item, i) => (
-                        <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
-                          <span className="text-destructive flex-shrink-0">•</span>
+                        <li key={i} className="flex items-start gap-3 text-muted-foreground">
+                          <X size={18} className="text-destructive flex-shrink-0 mt-0.5" />
                           {item}
                         </li>
                       ))}
@@ -464,56 +529,8 @@ export default function TourDetailsPage() {
               </div>
             </div>
           </Card>
-
-          {/* Dates & Tickets Section - RESTORED */}
-          <Card className="p-6 border-border shadow-md">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-medium text-foreground">Date & Tickets</h2>
-              <Button
-                size="sm"
-                className="cursor-pointer text-black/80 hover:bg-primary/10 bg-transparent border border-1 flex items-center gap-2"
-                onClick={() => setDateModalOpen(true)}
-              >
-                <Plus size={16} />
-                Add New Date
-              </Button>
-            </div>
-
-            {isDatesLoading && reduxDates.length === 0 ? (
-              <div className="flex justify-center py-4">
-                <Loader2 className="h-6 w-6 animate-spin text-primary" />
-              </div>
-            ) : reduxDates.length > 0 ? (
-              <div className="space-y-2 mb-4">
-                {reduxDates.map((date: any) => (
-                  <Link href={`/dashboard/tours/${tour.id}/dates/${date.id}`}>
-                  <div
-                    key={date.id}
-                    className="flex items-center justify-between bg-secondary p-3 rounded-lg border border-border hover:border-primary transition-colors cursor-pointer"
-                  >
-                    {/* <div className="flex flex-row justify-between gap-2"> */}
-                    
-                      <Badge className="bg-primary text-primary-foreground">
-                        {new Date(date.date).toLocaleDateString()}
-                      </Badge>
-                    
-                    <div className="flex flex-row justify-between gap-2">
-
-                      <TimeSlotCount dateId={date.id.toString()} />
-                    </div>
-                    {/* </div> */}
-                  </div>
-                  </Link>
-                ))}
-              </div>
-            ) : (
-              <p className="text-muted-foreground text-sm py-4 text-center">
-                No dates scheduled yet
-              </p>
-            )}
-          </Card>
-        </div>
-      </div>
+        </TabsContent>
+      </Tabs>
 
       {/* Modals placeholders */}
       <LocationModal
