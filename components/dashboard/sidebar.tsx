@@ -97,8 +97,8 @@ export function Sidebar({ isMobile = false, onClose, isCollapsed = false }: Side
         {/* Logo Section */}
         <div className="flex items-center justify-center p-4 border-b border-sidebar-border flex-shrink-0">
           <img
-            src="/images/company.png"
-            alt="CityRome Tickets"
+            src="/images/logo_city_rome_tickets.png"
+            alt="City Rome Tickets"
             className={cn(
               'h-10 sm:h-12 object-contain transition-all duration-300',
               isCollapsed && !isMobile ? 'h-18' : 'h-18 sm:h-22'

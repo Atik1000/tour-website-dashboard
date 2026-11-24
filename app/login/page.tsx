@@ -57,8 +57,8 @@ export default function LoginPage() {
           {/* Company Logo */}
           <div className="flex justify-center mb-6 sm:mb-8">
             <img
-              src="/images/company.png"
-              alt="CityRome Tickets"
+              src="/images/logo_city_rome_tickets.png"
+              alt="City Rome Tickets"
               className="h-12 sm:h-16 object-contain"
             />
           </div>
